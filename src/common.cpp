@@ -13,10 +13,14 @@ int distanceToClosestPoint(Point_t poi, std::list<Point_t> const& goals)
 {
   // Return minimum distance from goals-list
   int min_dist = INT_MAX;
+  ##???????? what is INT_MAX
   std::list<Point_t>::const_iterator it;
   for (it = goals.begin(); it != goals.end(); ++it)
   {
     int cur_dist = distanceSquared((*it), poi);
+   ##????????????? go to where * it points to?. poi is the current point?
+    
+    
     if (cur_dist < min_dist)
     {
       min_dist = cur_dist;
@@ -24,6 +28,8 @@ int distanceToClosestPoint(Point_t poi, std::list<Point_t> const& goals)
   }
   return min_dist;
 }
+
+
 
 int distanceSquared(const Point_t& p1, const Point_t& p2)
 {
@@ -35,7 +41,7 @@ int distanceSquared(const Point_t& p1, const Point_t& p2)
   {
     throw std::range_error("Integer overflow error for the given points");
   }
-
+##??????????????
   int dy2 = dy * dy;
   if (dy2 != 0 && dy2 / dy != dy)
   {
