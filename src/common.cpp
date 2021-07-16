@@ -102,7 +102,7 @@ bool a_star_to_open_space(std::vector<std::vector<bool> > const &grid, gridNode_
       //(depends on understanding of heuristic)??????????? what does it mean by sorting by heuristics
       std::sort(open1.begin(), open1.end(), sort_gridNodePath_heuristic_desc);
 
-      std::vector<gridNode_t> nn = open1.back();  // Get the *path* with the lowest heuristic cost
+      std::vector<gridNode_t> nn = open1.back();  // ???????? why , and what does it mean by "back()"???Get the *path* with the lowest heuristic cost
       open1.pop_back();  // The last element is no longer open because we use it here, so remove from open list
 #ifdef DEBUG_PLOT
       std::cout << "A*: Check out path from" << nn.front().pos << " to " << nn.back().pos
@@ -117,32 +117,36 @@ bool a_star_to_open_space(std::vector<std::vector<bool> > const &grid, gridNode_
         std::vector<gridNode_t>::iterator iter;
         for (iter = nn.begin(); iter != nn.end(); ++iter)
         {
+//????????? popback is to take out? and push back is to push it back in?     we return after finding first path??     
           pathNodes.push_back((*iter));
         }
-
         return false;  // We do not resign, we found a path
       }
       else  // Path nn does not lead to open space
       {
         if (nn.size() > 1)
         {
+          //????????? why point to last of nn?
           // Create iterator for gridNode_t list and let it point to the last element of nn
           std::vector<gridNode_t>::iterator it = --(nn.end());
           dx = it->pos.x - (it - 1)->pos.x;
           dy = it->pos.y - (it - 1)->pos.y;
           // TODO(CesarLopez) docs: this seems to cycle through directions
           // (notice the shift-by-one between both sides of the =)
+          // ???????????why do they do the following:
           dx_prev = dx;
           dx = -dy;
           dy = dx_prev;
         }
         else
         {
+         // ???????????why do they do the following:
+
           dx = 0;
           dy = 1;
         }
 
-        // For all nodes surrounding the end of the end of the path nn
+        // ??????????? why are there 4 nodes (what are nodes)??? (what does it mean by surrounding by? how calc) For all nodes surrounding the end of the end of the path nn
         for (uint i = 0; i < 4; ++i)
         {
           Point_t p2 =
