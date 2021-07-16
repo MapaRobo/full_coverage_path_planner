@@ -13,12 +13,12 @@ int distanceToClosestPoint(Point_t poi, std::list<Point_t> const& goals)
 {
   // Return minimum distance from goals-list
   int min_dist = INT_MAX;
-  ##???????? what is INT_MAX
+ //???????? what is INT_MAX
   std::list<Point_t>::const_iterator it;
   for (it = goals.begin(); it != goals.end(); ++it)
   {
     int cur_dist = distanceSquared((*it), poi);
-   ##????????????? go to where * it points to?. poi is the current point?
+//????????????? go to where * it points to?. poi is the current point?
     
     
     if (cur_dist < min_dist)
@@ -41,7 +41,7 @@ int distanceSquared(const Point_t& p1, const Point_t& p2)
   {
     throw std::range_error("Integer overflow error for the given points");
   }
-##??????????????
+//?????????????? why owuld it have integer overflow?
   int dy2 = dy * dy;
   if (dy2 != 0 && dy2 / dy != dy)
   {
@@ -51,7 +51,7 @@ int distanceSquared(const Point_t& p1, const Point_t& p2)
   if (dx2 > std::numeric_limits< int >::max() - dy2)
     throw std::range_error("Integer overflow error for the given points");
   int d2 = dx2 + dy2;
-
+//?????? return squared of integers because it doesn't matter whether it's square/not squared as we only are prioritizing
   return d2;
 }
 
@@ -59,26 +59,28 @@ int distanceSquared(const Point_t& p1, const Point_t& p2)
  * Sort vector<gridNode> by the heuristic value of the last element
  * @return whether last elem. of first has a larger heuristic value than last elem of second
  */
+// ?????????? what exactly is returned return and what is heuristics? ?
 bool sort_gridNodePath_heuristic_desc(const std::vector<gridNode_t> &first, const std::vector<gridNode_t> &second)
 {
   return (first.back().he > second.back().he);
 }
+
 
 bool a_star_to_open_space(std::vector<std::vector<bool> > const &grid, gridNode_t init, int cost,
                           std::vector<std::vector<bool> > &visited, std::list<Point_t> const &open_space,
                           std::list<gridNode_t> &pathNodes)
 {
   uint dx, dy, dx_prev, nRows = grid.size(), nCols = grid[0].size();
-
+// ?????????? what does closed do?
   std::vector<std::vector<bool> > closed(nRows, std::vector<bool>(nCols, eNodeOpen));
-  // All nodes in the closest list are currently still open
+  //??????? not sure what this means---? "closest" All nodes in the closest list are currently still open
 
   closed[init.pos.y][init.pos.x] = eNodeVisited;  // Of course we have visited the current/initial location
 #ifdef DEBUG_PLOT
   std::cout << "A*: Marked init " << init << " as eNodeVisited (true)" << std::endl;
   printGrid(closed);
 #endif
-
+//?????????? what does initializing it as 1 mean here
   std::vector<std::vector<gridNode_t> > open1(1, std::vector<gridNode_t>(1, init));  // open1 is a *vector* of paths
 
   while (true)
@@ -89,6 +91,7 @@ bool a_star_to_open_space(std::vector<std::vector<bool> > const &grid, gridNode_
     if (open1.size() == 0)  // If there are no open paths, there's no place to go and we must resign
     {
       // Empty end_node list and add init as only element
+      //???????????? why -- in front of pathnode()
       pathNodes.erase(pathNodes.begin(), --(pathNodes.end()));
       pathNodes.push_back(init);
       return true;  // We resign, cannot find a path
@@ -96,6 +99,7 @@ bool a_star_to_open_space(std::vector<std::vector<bool> > const &grid, gridNode_
     else
     {
       // Sort elements from high to low (because sort_gridNodePath_heuristic_desc uses a > b)
+      //(depends on understanding of heuristic)??????????? what does it mean by sorting by heuristics
       std::sort(open1.begin(), open1.end(), sort_gridNodePath_heuristic_desc);
 
       std::vector<gridNode_t> nn = open1.back();  // Get the *path* with the lowest heuristic cost
