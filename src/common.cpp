@@ -161,10 +161,12 @@ bool a_star_to_open_space(std::vector<std::vector<bool> > const &grid, gridNode_
 
           if (p2.x >= 0 && p2.x < nCols && p2.y >= 0 && p2.y < nRows)  // Bounds check, do not sep out of map
           {
-            // If the new node (a neighbor of the end of the path nn) is open, append it to newPath ( = nn)
+            // ???? why append to elongate the path??? (what if there are more than 1 open neighbors?)If the new node (a neighbor of the end of the path nn) is open, append it to newPath ( = nn)
+                       
             // and add that to the open1-list of paths.
             // Because of the pop_back on open1, what happens is that the path is temporarily 'checked out',
             // modified here, and then added back (if the condition above and below holds)
+            // ?????????? how does "closed and grid" differ?.?
             if (closed[p2.y][p2.x] == eNodeOpen && grid[p2.y][p2.x] == eNodeOpen)
             {
 #ifdef DEBUG_PLOT
@@ -178,6 +180,8 @@ bool a_star_to_open_space(std::vector<std::vector<bool> > const &grid, gridNode_
                 new_point,                                                                // Point: x,y
                 cost + nn.back().cost,                                                    // Cost
                 cost + nn.back().cost + distanceToClosestPoint(p2, open_space) + i,
+                // ???????????? how does the cost map here work again? 
+                // is this visiting the next node?
                 // Heuristic (+i so CCW turns are cheaper)
               };
               newPath.push_back(new_node);
