@@ -14,23 +14,32 @@
 PLUGINLIB_EXPORT_CLASS(full_coverage_path_planner::BoustrophedonSTC, nav_core::BaseGlobalPlanner)
 
 int pattern_dir_ = point;
+int robot_dir_ = point;
+// save plan
+std::vector<geometry_msgs::PoseStamped> prev_plan_;
 
 namespace full_coverage_path_planner
 {
+
+void BoustrophedonSTC::coverage_grid_callback(const nav_msgs::OccupancyGrid::ConstPtr& msg) {
+  visited_grid_ = *msg;
+}
+
 void BoustrophedonSTC::initialize(std::string name, costmap_2d::Costmap2DROS* costmap_ros)
 {
   if (!initialized_)
   {
-    // Create a publisher to visualize the plan
     ros::NodeHandle private_nh("~/");
     ros::NodeHandle nh, private_named_nh("~/" + name);
 
+    // Create a publisher to visualize the plan
     plan_pub_ = private_named_nh.advertise<nav_msgs::Path>("plan", 1);
     // Try to request the cpp-grid from the cpp_grid map_server
     cpp_grid_client_ = nh.serviceClient<nav_msgs::GetMap>("static_map");
     // Get the cost map:
     costmap_ros_ = costmap_ros;
     costmap_ = costmap_ros->getCostmap();
+    visited_grid_ = nav_msgs::OccupancyGrid();
 
     // Define  robot radius (radius) parameter
     float robot_radius_default = 0.5f;
@@ -39,11 +48,17 @@ void BoustrophedonSTC::initialize(std::string name, costmap_2d::Costmap2DROS* co
     float tool_radius_default = 0.5f;
     private_named_nh.param<float>("tool_radius", tool_radius_, tool_radius_default);
     initialized_ = true;
+
+    string coverage_grid_topic_default = "/coverage_grid";
+    private_named_nh.param<string>("coverage_grid", coverage_grid_topic_, coverage_grid_topic_default);
+    // Get the visited occupancy grid
+    coverage_grid_sub = nh.subscribe(coverage_grid_topic_, 0, &BoustrophedonSTC::coverage_grid_callback, this);
   }
 }
 
-std::list<gridNode_t> BoustrophedonSTC::boustrophedon(std::vector<std::vector<bool> > const& grid, std::list<gridNode_t>& init,
-                                        std::vector<std::vector<bool> >& visited)
+std::list<gridNode_t> BoustrophedonSTC::boustrophedon(std::vector<std::vector<bool> > const& grid,
+                                                      std::list<gridNode_t>& init,
+                                                      std::vector<std::vector<bool> >& visited)
 {
   int dx, dy, x2, y2, i, nRows = grid.size(), nCols = grid[0].size();
   // Mountain pattern filling of the open space
@@ -52,11 +67,30 @@ std::list<gridNode_t> BoustrophedonSTC::boustrophedon(std::vector<std::vector<bo
 
   // Set starting pos
   x2 = pathNodes.back().pos.x;
-  y2 = pathNodes.back().pos.y; 
-  // set initial direction based on space visible from initial pos
-  int robot_dir = dirWithMostSpace(x2, y2, nCols, nRows, grid, visited, point);
-  // set dx and dy based on robot_dir
-  switch(robot_dir) {
+  y2 = pathNodes.back().pos.y;
+  // set initial direction based on...
+  // 1. current robot heading (robot_dir_)
+  // 2. pattern direction (pattern_dir_)
+  // 3. space visible from initial pos
+  ROS_INFO("patern_dir_: %u", pattern_dir_);
+  ROS_INFO("robot_dir_: %u", robot_dir_);
+
+  if (pattern_dir_ == north || pattern_dir_ == south) {
+    robot_dir_ = dirWithMostSpace(x2, y2, nCols, nRows, grid, visited, north);
+    if (robot_dir_ == south) {
+      robot_dir_ = dirWithMostSpace(x2, y2, nCols, nRows, grid, visited, south);
+    }
+  } else if (pattern_dir_ == east || pattern_dir_ == west) {
+    robot_dir_ = dirWithMostSpace(x2, y2, nCols, nRows, grid, visited, east);
+    if (robot_dir_ == west) {
+      robot_dir_ = dirWithMostSpace(x2, y2, nCols, nRows, grid, visited, west);
+    }
+  } else { // pattern_dir_ == point
+    // keep robot_dir_ as robot's initial heading
+  } 
+
+  // set dx and dy based on robot_dir_
+  switch(robot_dir_) {
     case east: // 1
       dx = +1;
       dy = 0;
@@ -75,7 +109,7 @@ std::list<gridNode_t> BoustrophedonSTC::boustrophedon(std::vector<std::vector<bo
       break;
     default:
       ROS_ERROR("Full Coverage Path Planner: NO INITIAL ROBOT DIRECTION CALCULATED. This is a logic error that must be fixed by editing boustrophedon_stc.cpp. Will travel east for now.");
-      robot_dir = east;
+      robot_dir_ = east;
       dx = +1;
       dy = 0;
       break;
@@ -102,7 +136,7 @@ std::list<gridNode_t> BoustrophedonSTC::boustrophedon(std::vector<std::vector<bo
     }
 
     // 2. check left and right after hitting wall, then change direction
-    if (robot_dir == north || robot_dir == south)
+    if (robot_dir_ == north || robot_dir_ == south)
     {
       if (!validMove(x2 + 1, y2, nCols, nRows, grid, visited)
         && !validMove(x2 - 1, y2, nCols, nRows, grid, visited)) {
@@ -127,9 +161,9 @@ std::list<gridNode_t> BoustrophedonSTC::boustrophedon(std::vector<std::vector<bo
           }
           ROS_INFO("rotation dir with most space successful");
         }
-        if (pattern_dir_ = east) {
+        if (pattern_dir_ == east) {
             x2++;
-        } else if (pattern_dir_ = west) {
+        } else if (pattern_dir_ == west) {
             x2--;
         }
       }
@@ -138,15 +172,15 @@ std::list<gridNode_t> BoustrophedonSTC::boustrophedon(std::vector<std::vector<bo
       addNodeToList(x2, y2, pathNodes, visited);
 
       // change direction 180 deg
-      if (robot_dir == north) {
-        robot_dir = south;
+      if (robot_dir_ == north) {
+        robot_dir_ = south;
         dy = -1;
-      } else if (robot_dir == south) {
-        robot_dir = north;
+      } else if (robot_dir_ == south) {
+        robot_dir_ = north;
         dy = 1;
       }
     }
-    else if (robot_dir == east || robot_dir == west)
+    else if (robot_dir_ == east || robot_dir_ == west)
     {
       if (!validMove(x2, y2 + 1, nCols, nRows, grid, visited)
         && !validMove(x2, y2 - 1, nCols, nRows, grid, visited)) {
@@ -170,9 +204,9 @@ std::list<gridNode_t> BoustrophedonSTC::boustrophedon(std::vector<std::vector<bo
             pattern_dir_ = dirWithMostSpace(x2, y2, nCols, nRows, grid, visited, west);
           }
         }
-        if (pattern_dir_ = north) {
+        if (pattern_dir_ == north) {
             y2++;
-        } else if (pattern_dir_ = south) {
+        } else if (pattern_dir_ == south) {
             y2--;
         }
       }
@@ -181,11 +215,11 @@ std::list<gridNode_t> BoustrophedonSTC::boustrophedon(std::vector<std::vector<bo
       addNodeToList(x2, y2, pathNodes, visited);
       
       // change direction 180 deg
-      if (robot_dir == east) {
-        robot_dir = west;
+      if (robot_dir_ == east) {
+        robot_dir_ = west;
         dx = -1;
-      } else if (robot_dir == west) {
-        robot_dir = east;
+      } else if (robot_dir_ == west) {
+        robot_dir_ = east;
         dx = 1;
       }
     }
@@ -196,28 +230,45 @@ std::list<gridNode_t> BoustrophedonSTC::boustrophedon(std::vector<std::vector<bo
 }
 
 std::list<Point_t> BoustrophedonSTC::boustrophedon_stc(std::vector<std::vector<bool> > const& grid,
-                                          Point_t& init,
+                                          std::vector<std::vector<bool> > const& visited_grid,
+                                          geometry_msgs::PoseStamped& init,
                                           int &multiple_pass_counter,
                                           int &visited_counter)
 {
   int x, y, nRows = grid.size(), nCols = grid[0].size();
-  pattern_dir_ = point;
+  double yaw;
   // Initial node is initially set as visited so it does not count
   multiple_pass_counter = 0;
   visited_counter = 0;
 
   std::vector<std::vector<bool>> visited;
-  visited = grid;  // Copy grid matrix
-  x = init.x;
-  y = init.y;
+  visited = visited_grid;  // Copy visited grid
+  x = init.pose.position.x;
+  y = init.pose.position.y;
+  tf2::Quaternion heading_quaternion(init.pose.orientation.x,
+                                     init.pose.orientation.y,
+                                     init.pose.orientation.z,
+                                     init.pose.orientation.w);
+  heading_quaternion.normalize();
+  yaw = heading_quaternion.getAngle();
 
+  // Set initial robot_dir:
+  ROS_INFO("initial robot angle: %f", yaw);
+  if (M_PI*(1.0f/4.0f) <= yaw && yaw < M_PI*(3.0f/4.0f)) {
+    robot_dir_ = north;
+  } else if (M_PI*(3.0f/4.0f) <= yaw && yaw < M_PI*(5.0f/4.0f)) {
+    robot_dir_ = west;
+  } else if (M_PI*(5.0f/4.0f) <= yaw && yaw < M_PI*(7.0f/4.0f)) {
+    robot_dir_ = south;
+  } else {
+    robot_dir_ = east;
+  }
   // add initial point to pathNodes
   std::list<gridNode_t> pathNodes;
   std::list<Point_t> fullPath;
   addNodeToList(x, y, pathNodes, visited);
 
   std::list<Point_t> goals = map_2_goals(visited, eNodeOpen);  // Retrieve all goalpoints (Cells not visited)
-  std::cout << "Goals Left: " << goals.size() << std::endl;
   std::list<gridNode_t>::iterator it;
 
 #ifdef DEBUG_PLOT
@@ -290,33 +341,26 @@ bool BoustrophedonSTC::makePlan(const geometry_msgs::PoseStamped& start, const g
     ROS_ERROR("This planner has not been initialized yet, but it is being used, please call initialize() before use");
     return false;
   }
-  else
-  {
-    ROS_INFO("Initialized!");
-  }
 
-  //clear the plan, just in case
-  plan.clear();
   costmap_ = costmap_ros_->getCostmap();
 
   clock_t begin = clock();
-  Point_t startPoint;
+  geometry_msgs::PoseStamped startPose;
 
-  /********************** Get grid from server **********************/
   std::vector<std::vector<bool> > grid;
-  nav_msgs::GetMap grid_req_srv;
-  ROS_INFO("Requesting grid...");
-  if (!cpp_grid_client_.call(grid_req_srv))
+  std::vector<std::vector<bool> > visited_grid;
+  ROS_INFO("Parsing costmap to internal representation...");
+  if (!parseCostmap(costmap_, grid, robot_radius_ * 2, tool_radius_ * 2, start, startPose))
   {
-    ROS_ERROR("Could not retrieve grid from map_server");
+    ROS_ERROR("Could not parse costmap");
     return false;
   }
-  ROS_INFO("grid recieved!!");
+  ROS_INFO("costmap parsed!!");
 
-  ROS_INFO("Parsing grid to internal representation...");
-  if (!parseCostmap(costmap_, grid, robot_radius_ * 2, tool_radius_ * 2, start, startPoint))
+  ROS_INFO("Parsing visited areas to internal representation...");
+  if (!parseGrid(visited_grid_, visited_grid, robot_radius_ * 2, tool_radius_ * 2))
   {
-    ROS_ERROR("Could not parse retrieved grid");
+    ROS_ERROR("Could not parse visited grid");
     return false;
   }
   ROS_INFO("grid parsed!!");
@@ -329,7 +373,8 @@ bool BoustrophedonSTC::makePlan(const geometry_msgs::PoseStamped& start, const g
 #endif
 
   std::list<Point_t> goalPoints = boustrophedon_stc(grid,
-                                              startPoint,
+                                              visited_grid,
+                                              startPose,
                                               boustrophedon_cpp_metrics_.multiple_pass_counter,
                                               boustrophedon_cpp_metrics_.visited_counter);
   ROS_INFO("naive cpp completed!");

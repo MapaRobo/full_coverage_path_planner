@@ -99,7 +99,7 @@ protected:
                     float robotRadius,
                     float toolRadius,
                     geometry_msgs::PoseStamped const& realStart,
-                    Point_t& scaledStart);
+                    geometry_msgs::PoseStamped& scaledStart);
 
   /**
    * Convert ROS Occupancy grid to internal grid representation, given the size of a single tile
@@ -113,17 +113,19 @@ protected:
   bool parseGrid(nav_msgs::OccupancyGrid const& cpp_grid_,
                  std::vector<std::vector<bool> >& grid,
                  float robotRadius,
-                 float toolRadius,
-                 geometry_msgs::PoseStamped const& realStart,
-                 Point_t& scaledStart);
+                 float toolRadius);
+
   ros::Publisher plan_pub_;
+  ros::Subscriber coverage_grid_sub;
   ros::ServiceClient cpp_grid_client_;
   nav_msgs::OccupancyGrid cpp_grid_;
+  nav_msgs::OccupancyGrid visited_grid_;
   // Using costmap instead of Occupancy Grid from map server as the costmap updates periodically.
   costmap_2d::Costmap2DROS* costmap_ros_;
   costmap_2d::Costmap2D* costmap_;
   float robot_radius_;
   float tool_radius_;
+  string coverage_grid_topic_;
   float plan_resolution_;
   float tile_size_;
   fPoint_t grid_origin_;

@@ -11,6 +11,7 @@
 #include <costmap_2d/costmap_2d.h>
 #include <nav_core/base_global_planner.h>
 #include <nav_msgs/Path.h>
+#include <nav_msgs/OccupancyGrid.h>
 #include <nav_msgs/GetMap.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <angles/angles.h>
@@ -44,11 +45,13 @@ public:
    * In essence, the robot moves forward until an obstacle or visited node is met, then turns right or left (making a boustrophedon pattern)
    * When stuck in the middle of the boustrophedon, use A* to get out again and start a new boustrophedon, until a* can't find a path to uncovered cells
    * @param grid
+   * @param visited
    * @param init
    * @return
    */
   static std::list<Point_t> boustrophedon_stc(std::vector<std::vector<bool> > const &grid,
-                                        Point_t &init,
+                                        std::vector<std::vector<bool> > const& visited_grid,
+                                        geometry_msgs::PoseStamped &init,
                                         int &multiple_pass_counter,
                                         int &visited_counter);
 
@@ -69,6 +72,12 @@ private:
    * @param  costmap A pointer to the ROS wrapper of the costmap to use for planning
    */
   void initialize(std::string name, costmap_2d::Costmap2DROS* costmap_ros);
+
+  /**
+   * @brief callback function which is called for the updated occupancy grid with visited nodes marked
+   * @param msg Occupancy Grid Message
+   */
+  void coverage_grid_callback(const nav_msgs::OccupancyGrid::ConstPtr& msg);
 };
 
 }  // namespace full_coverage_path_planner

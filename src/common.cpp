@@ -63,7 +63,6 @@ bool a_star_to_open_space(std::vector<std::vector<bool> > const &grid, gridNode_
                           std::list<gridNode_t> &pathNodes)
 {
   uint dx, dy, dx_prev, nRows = grid.size(), nCols = grid[0].size();
-
   std::vector<std::vector<bool> > closed(nRows, std::vector<bool>(nCols, eNodeOpen));
   // All nodes in the closest list are currently still open
 

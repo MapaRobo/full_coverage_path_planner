@@ -1,8 +1,9 @@
 #! /usr/bin/env python
 
 import rospy
-import tf
+import tf2_ros
 from nav_msgs.msg import OccupancyGrid
+from nav_msgs.srv import GetMap
 from numpy import ones, sum
 from std_msgs.msg import Float32, Header
 from std_srvs.srv import Trigger
@@ -12,53 +13,41 @@ X, Y, Z, W = 0, 1, 2, 3
 
 
 class CoverageProgressNode(object):
-    """The CoverageProgressNode keeps track of coverage progress.
+    """
+    The CoverageProgressNode keeps track of coverage progress.
     It does this by periodically looking up the position of the coverage disk in an occupancy grid.
     Cells within a radius from this position are 'covered'
 
-    Cell values are interpreted in this way: Lower is covered, higher is less covered
-    - 100: uncovered (initial value)
-    - < 100: covered
+    Cell values (0 ~ 100) are interpreted in this way: Lower is yet to be visited, Higher is covered
+    - 0: uncovered (initial value)
+    - > 0: covered
 
     The node emits a coverage progress,
-        which is the ratio of cells considered coverage (0.0 is everything uncovered, 1.0 is all covered)
+    which is the ratio of cells considered coverage (0.0 is everything uncovered, 1.0 is all covered)
     """
 
-    DIRTY = 100
+    DIRTY = 0
+    CLEAN = 100
 
     def __init__(self):
-        self.listener = tf.TransformListener()
+        # Transform Initialization
+        self.tfBuffer = tf2_ros.Buffer()
+        self.tfListener = tf2_ros.TransformListener(self.tfBuffer)
 
-        x = None  # type: float
-        y = None  # type: float
-        self._coverage_area = None  # type: Tuple[float, float]
-
-        self.coverage_resolution = None  # type: float  # How big is a cell [m]
-
-        # How well covered is a cell after it has been covered for 1 time step
-        self.coverage_effectivity = None  # type: int
-
-        self.map_frame = None  # type: str
-        self.coverage_frame = None  # type: str
-
-        self.grid = self._initialize_map()
+        # ROS Stuff
+        self.map_frame = rospy.get_param("~map_frame", default="map")
+        self.coverage_frame = rospy.get_param("~coverage_frame", default="base_link")
 
         self.progress_pub = rospy.Publisher("coverage_progress", Float32, queue_size=1)
         self.grid_pub = rospy.Publisher("coverage_grid", OccupancyGrid, queue_size=1)
 
         self.reset_srv = rospy.Service('reset', Trigger, self.reset)
 
-        self._rate = rospy.get_param("~rate", 10.0)
-        self._update_timer = rospy.Timer(rospy.Duration(1.0/self._rate), self._update_callback)
+        # Recieve Initial Static Map
+        self.grid = OccupancyGrid()
+        self._initialize_map()
 
-    def _initialize_map(self):
-        # Initialize coverage matrix
-
-        # Define parameters
-        x = rospy.get_param("~target_area/x", 10.0)  # height of the area to cover, in x direction of the map
-        y = rospy.get_param("~target_area/y", 5.0)  # width of the area to cover, in y direction of the map
-        self._coverage_area = (x, y)
-
+        # Get coverage radius, which is the robot radius which counts as coverage
         try:
             self.coverage_radius_meters = rospy.get_param("~coverage_radius")
         except KeyError:
@@ -67,44 +56,42 @@ class CoverageProgressNode(object):
             except KeyError:
                 rospy.logerr("Specify either coverage_width or coverage_radius")
                 raise ValueError("Neither ~coverage_radius nor ~coverage_width specified, one of these is required")
+        self.coverage_radius_meters += 2 * self.grid.info.resolution  # Compensate for discretization
+        self.coverage_radius_cells = int((self.coverage_radius_meters) / self.grid.info.resolution)
 
-        self.coverage_resolution = rospy.get_param("~coverage_resolution", 0.05)  # How big is a cell [m]
+        # How covered is a cell after it has been covered for 1 time step
+        self.coverage_effectivity = rospy.get_param("~coverage_effectivity", default=5)
 
-        # How much covered is a cell after it has been covered for 1 time step
-        self.coverage_effectivity = rospy.get_param("~coverage_effectivity", 5)
+        # Timer Callback
+        self._rate = rospy.get_param("~rate", 10.0)
+        self._update_timer = rospy.Timer(rospy.Duration(1.0/self._rate), self._update_callback)
 
-        self.map_frame = rospy.get_param("~map_frame", "map")
-        self.coverage_frame = rospy.get_param("~coverage_frame", "base_link")
+    def _initialize_map(self):
+        print("Waiting for static map service...")
+        rospy.wait_for_service("static_map")
+        try:
+            static_map_client = rospy.ServiceProxy('static_map', GetMap)
+            response = static_map_client()
+            self.grid.header = response.map.header
+            self.grid.info = response.map.info
+            self.grid.data = list(response.map.data)
 
-        self.coverage_radius_meters += 2 * self.coverage_resolution  # Compensate for discretization
-        self.coverage_radius_cells = int((self.coverage_radius_meters) / self.coverage_resolution)
-
-        grid = OccupancyGrid()
-        grid.info.resolution = self.coverage_resolution
-
-        grid.info.width = abs(int(self._coverage_area[X] / self.coverage_resolution))
-        grid.info.height = abs(int(self._coverage_area[Y] / self.coverage_resolution))
-
-        grid.info.origin.position.x = 0 if self._coverage_area[X] > 0 else self._coverage_area[X]
-        grid.info.origin.position.y = 0 if self._coverage_area[Y] > 0 else self._coverage_area[Y]
-        grid.info.origin.orientation.w = 1
-
-        # Initialize OccupancyGrid to have all cells DIRTY
-        grid.data = self.DIRTY * ones(grid.info.width * grid.info.height)
-
-        return grid
+            print("Recieved static map!")
+        except rospy.ServiceException as e:
+            print("static map service call failed: %s"%e)
 
     def _update_callback(self, event):
         # Get the position of point (0,0,0) the coverage_disk frame wrt. the map frame (which can both be remapped if need be)
 
         try:
-            (coveragepos, rot) = self.listener.lookupTransform(self.map_frame, self.coverage_frame, rospy.Time(0))
-        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+            trans = self.tfBuffer.lookup_transform(self.map_frame, self.coverage_frame, rospy.Time())
+        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as e:
+            print("tf error: %s"%e)
             return
-
+        
         # Element of matrix corresponding to middle of coverage surface
-        x_point = int((coveragepos[X] - self.grid.info.origin.position.x) / self.coverage_resolution)
-        y_point = int((coveragepos[Y] - self.grid.info.origin.position.y) / self.coverage_resolution)
+        x_point = int((trans.transform.translation.x - self.grid.info.origin.position.x) / self.grid.info.resolution)
+        y_point = int((trans.transform.translation.y - self.grid.info.origin.position.y) / self.grid.info.resolution)
 
         # Initialize message
         self.grid.header = Header()
@@ -114,33 +101,25 @@ class CoverageProgressNode(object):
         for i in range(2 * self.coverage_radius_cells):
             for j in range(2 * self.coverage_radius_cells):
 
+                # iterate from (-radius) to (+radius)
                 x_index = j - self.coverage_radius_cells
                 y_index = i - self.coverage_radius_cells
 
                 array_index = x_point + x_index + self.grid.info.width * (y_point + y_index)
 
-                cell_in_coverage_circle = x_index ** 2 + y_index ** 2 < self.coverage_radius_cells ** 2
-
-                cell_in_grid = 0 <= x_point + x_index < abs(int(self._coverage_area[X] / self.coverage_resolution)) \
-                               and 0 <= y_point + y_index < abs(int(self._coverage_area[Y] / self.coverage_resolution))
+                # if cell is inside coverage circle: determined using circle formula x^2+y^2 = (radius)^2
+                cell_in_coverage_circle = (x_index ** 2 + y_index ** 2 < self.coverage_radius_cells ** 2)
+                # if cell is within the grid
+                cell_in_grid = 0 <= x_point + x_index < abs(int(self.grid.info.width / self.grid.info.resolution)) \
+                               and 0 <= y_point + y_index < abs(int(self.grid.info.height / self.grid.info.resolution))
 
                 if cell_in_coverage_circle and cell_in_grid:
-                    self.grid.data[array_index] = max(0, self.grid.data[array_index] - self.coverage_effectivity)
-        else:
-            rospy.logdebug("x_point %i y_point %i, x_meas %f, y_meas %f", x_point, y_point, coveragepos[X],
-                           coveragepos[Y])
+                    self.grid.data[array_index] = min(self.CLEAN, self.grid.data[array_index] + self.coverage_effectivity)
 
-        coverage_progress = float(sum([self.grid.data < self.DIRTY])) / (self.grid.info.width * self.grid.info.height)
+        coverage_progress = float(sum(self.grid.data)) / (self.grid.info.width * self.grid.info.height * 100.0)
 
         self.progress_pub.publish(coverage_progress)
         self.grid_pub.publish(self.grid)
-
-    def finish_callback(self, msg):
-
-        if msg:
-            coverage_progress = float(sum([self.grid.data < self.DIRTY])) / (self.grid.info.width * self.grid.info.height)
-
-            self.progress_pub.publish(coverage_progress)
 
     def reset(self, srv_request):
         rospy.loginfo("Reset coverage progress and grid")

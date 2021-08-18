@@ -190,7 +190,7 @@ bool FullCoveragePathPlanner::parseCostmap(costmap_2d::Costmap2D* costmap_grid_,
                                            float robotRadius,
                                            float toolRadius,
                                            geometry_msgs::PoseStamped const& realStart,
-                                           Point_t& scaledStart)
+                                           geometry_msgs::PoseStamped& scaledStart)
 {
   int ix, iy, nodeRow, nodeCol;
   uint32_t nodeSize = dmax(floor(toolRadius / costmap_grid_->getResolution()), 1);  // Size of node in pixels/units
@@ -211,12 +211,13 @@ bool FullCoveragePathPlanner::parseCostmap(costmap_2d::Costmap2D* costmap_grid_,
   ROS_INFO("grid origin: (%g, %g)", grid_origin_.x, grid_origin_.y);
 
   // Scale starting point
-  scaledStart.x = static_cast<unsigned int>(clamp((realStart.pose.position.x - grid_origin_.x) / tile_size_, 0.0,
+  scaledStart = realStart;
+  scaledStart.pose.position.x = static_cast<unsigned int>(clamp((realStart.pose.position.x - grid_origin_.x) / tile_size_, 0.0,
                              floor(nCols / tile_size_)));
-  scaledStart.y = static_cast<unsigned int>(clamp((realStart.pose.position.y - grid_origin_.y) / tile_size_, 0.0,
+  scaledStart.pose.position.y = static_cast<unsigned int>(clamp((realStart.pose.position.y - grid_origin_.y) / tile_size_, 0.0,
                              floor(nRows / tile_size_)));
   ROS_INFO("real start: (%g, %g)", realStart.pose.position.x, realStart.pose.position.y);
-  ROS_INFO("scaled start: (%u, %u)", scaledStart.x, scaledStart.y);
+  ROS_INFO("scaled start: (%u, %u)", scaledStart.pose.position.x, scaledStart.pose.position.y);
 
   // Scale grid
   for (iy = 0; iy < nRows; iy = iy + nodeSize)
@@ -249,9 +250,7 @@ bool FullCoveragePathPlanner::parseCostmap(costmap_2d::Costmap2D* costmap_grid_,
 bool FullCoveragePathPlanner::parseGrid(nav_msgs::OccupancyGrid const& cpp_grid_,
                                         std::vector<std::vector<bool> >& grid,
                                         float robotRadius,
-                                        float toolRadius,
-                                        geometry_msgs::PoseStamped const& realStart,
-                                        Point_t& scaledStart)
+                                        float toolRadius)
 {
   int ix, iy, nodeRow, nodeColl;
   uint32_t nodeSize = dmax(floor(toolRadius / cpp_grid_.info.resolution), 1);  // Size of node in pixels/units
@@ -271,14 +270,6 @@ bool FullCoveragePathPlanner::parseGrid(nav_msgs::OccupancyGrid const& cpp_grid_
   ROS_INFO("costmap resolution: %g", cpp_grid_.info.resolution);
   ROS_INFO("tile size: %g", tile_size_);
   ROS_INFO("grid origin: (%g, %g)", grid_origin_.x, grid_origin_.y);
-
-  // Scale starting point
-  scaledStart.x = static_cast<unsigned int>(clamp((realStart.pose.position.x - grid_origin_.x) / tile_size_, 0.0,
-                             floor(cpp_grid_.info.width / tile_size_)));
-  scaledStart.y = static_cast<unsigned int>(clamp((realStart.pose.position.y - grid_origin_.y) / tile_size_, 0.0,
-                             floor(cpp_grid_.info.height / tile_size_)));
-  ROS_INFO("real start: (%g, %g)", realStart.pose.position.x, realStart.pose.position.y);
-  ROS_INFO("scaled start: (%u, %u)", scaledStart.x, scaledStart.y);
 
   // Scale grid
   for (iy = 0; iy < nRows; iy = iy + nodeSize)
