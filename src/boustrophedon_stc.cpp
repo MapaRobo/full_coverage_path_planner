@@ -394,6 +394,7 @@ bool BoustrophedonSTC::makePlan(const geometry_msgs::PoseStamped& start, const g
   // (also controlled by planner_frequency parameter in move_base namespace)
 
   ROS_INFO("Publishing plan!");
+  ROS_INFO("Boustrophedon planner");
   publishPlan(plan);
   ROS_INFO("Plan published!");
   ROS_DEBUG("Plan published");
@@ -401,7 +402,7 @@ bool BoustrophedonSTC::makePlan(const geometry_msgs::PoseStamped& start, const g
   clock_t end = clock();
   double elapsed_secs = static_cast<double>(end - begin) / CLOCKS_PER_SEC;
   std::cout << "elapsed time: " << elapsed_secs << "\n";
-
+ 
   return true;
 }
 }  // namespace full_coverage_path_planner
