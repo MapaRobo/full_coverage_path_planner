@@ -42,6 +42,118 @@ void BoustrophedonSTC::initialize(std::string name, costmap_2d::Costmap2DROS* co
   }
 }
 
+bool is_edge_node(int x, int y, std::vector<std::vector<bool> > const& grid) {
+  int dx = 0, dy = 0, n_rows = grid.size(), n_cols = grid[0].size();
+  if (
+    (x >= 0 && x < n_cols && y >= 0 && y < n_rows)
+    && grid[x][y] == eNodeOpen
+  ) {
+    for (dx = -1; dx <= 1;dx++) {
+      for (dy = -1; dy <= 1;dy++) {
+        if (
+          !(dx == 0 && dy == 0)
+          && (x + dx >= 0 && x + dx < n_cols && y + dy >= 0 && y + dy < n_rows)
+          && grid[x + dx][y + dy] == eNodeVisited
+        ) {
+       	  return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+std::list<Point_t> BoustrophedonSTC::outer_loop(std::vector<std::vector<bool> > const& grid, Point_t& init)
+{
+  int dx = 0, dy = 0, x, y, n_rows = grid.size(), n_cols = grid[0].size();
+
+  std::vector<std::vector<bool>> visited = grid;  // Copy grid matrix
+
+  // Copy incoming list to 'end'
+  std::list<gridNode_t> path_nodes;
+  // Set starting pos
+  x = init.x;
+  y = init.y;
+  addNodeToList(x, y, path_nodes, visited);
+
+  // set initial direction based on space visible from initial pos
+  int robot_dir = dirWithLeastSpace(x, y, n_cols, n_rows, grid, visited, point);
+  if (robot_dir == east) {
+    dx = 1;
+  } else if (robot_dir == west) {
+    dx = -1;
+  } else if (robot_dir == north) {
+    dy = 1;
+  } else if (robot_dir == south) {
+    dy = -1;
+  } else {
+    ROS_ERROR("Full Coverage Path Planner: NO INITIAL ROBOT DIRECTION CALCULATED. This is a logic error that must be fixed by editing outer_loop function in boustrophedon_stc.cpp. Will travel east for now.");
+    robot_dir = east;
+    dx = +1;
+  }
+
+  bool done = false;
+  while (!done) {
+    // 1. drive straight until not a valid move (hit occupied cell or at end of map)
+    while(!validMove(x + dx, y + dy, n_cols, n_rows, grid, visited)) {
+      x += dx;
+      y += dy;
+      addNodeToList(x, y, path_nodes, visited);
+    }
+
+    // 2. connect the adjasen edge points to form a outer loop
+    int move_dir = 1;
+    if (dx == -1 || (dx == 0 && dy == 0)) {
+      move_dir = -1;
+    }
+
+    bool found_connecting_edge_node = false;
+    for (int it = 0; it < 8; it++) {
+      if (move_dir < 0) {
+        if (dx > -1) {
+          dx += move_dir;
+        } else if (dy > -1) {
+          dy += move_dir;
+        } else {
+          move_dir = move_dir * -1;
+        }
+      } else {
+        if (dx < 1) {
+          dx += move_dir;
+        } else if (dy < 1) {
+          dy += move_dir;
+        } else {
+          move_dir = move_dir * -1;
+        }
+      }
+
+      if (
+        (x + dx >= 0 && x + dx < n_cols && y + dy >= 0 && y + dy < n_rows)
+        && validMove(x + dx, y + dy, n_cols, n_rows, grid, visited)
+        && is_edge_node(x + dx, y + dy, grid)
+      ) {
+        addNodeToList(x, y, path_nodes, visited);
+        found_connecting_edge_node = true;
+        break;
+      }
+    }
+
+    if (!found_connecting_edge_node) {
+      done = true;
+    }
+  }
+
+  // Log
+  // printPathNodes(pathNodes);
+  std::list<Point_t> full_path;
+  for (std::list<gridNode_t>::iterator it = path_nodes.begin(); it != path_nodes.end(); ++it){
+    Point_t new_point = { it->pos.x, it->pos.y };
+    full_path.push_back(new_point);
+  }
+
+  return full_path;
+}
+
 std::list<gridNode_t> BoustrophedonSTC::boustrophedon(std::vector<std::vector<bool> > const& grid, std::list<gridNode_t>& init,
                                         std::vector<std::vector<bool> >& visited)
 {
@@ -328,14 +440,21 @@ bool BoustrophedonSTC::makePlan(const geometry_msgs::PoseStamped& start, const g
   printGrid(grid, grid, printPath);
 #endif
 
-  std::list<Point_t> goalPoints = boustrophedon_stc(grid,
-                                              startPoint,
+  std::list<Point_t> outer_loop_goal_points = outer_loop(grid,
+                                              startPoint);
+
+  std::list<Point_t> goal_points = boustrophedon_stc(grid,
+                                              outer_loop_goal_points.back(),
                                               boustrophedon_cpp_metrics_.multiple_pass_counter,
                                               boustrophedon_cpp_metrics_.visited_counter);
+  std::list<Point_t> full_path;
+  full_path.splice(full_path.end(), outer_loop_goal_points);
+  full_path.splice(full_path.end(), goal_points);
+
   ROS_INFO("naive cpp completed!");
   ROS_INFO("Converting path to plan");
 
-  parsePointlist2Plan(start, goalPoints, plan);
+  parsePointlist2Plan(start, full_path, plan);
   // Print some metrics:
   boustrophedon_cpp_metrics_.accessible_counter = boustrophedon_cpp_metrics_.visited_counter
                                             - boustrophedon_cpp_metrics_.multiple_pass_counter;

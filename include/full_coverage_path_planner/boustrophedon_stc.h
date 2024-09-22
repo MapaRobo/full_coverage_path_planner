@@ -52,6 +52,9 @@ public:
                                         int &multiple_pass_counter,
                                         int &visited_counter);
 
+  static std::list<Point_t> outer_loop(std::vector<std::vector<bool> > const &grid,
+                                       Point_t &init);
+
 private:
   /**
    * @brief Given a goal pose in the world, compute a plan
