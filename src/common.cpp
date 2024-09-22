@@ -342,18 +342,19 @@ void addNodeToList(int x2, int y2, std::list<gridNode_t>& pathNodes,
   return;
 }
 
-int dirWithMostSpace(int x_init, int y_init, int nCols, int nRows,
+void analyseFreeSpaces(int x_init, int y_init, int n_cols, int n_rows,
                      std::vector<std::vector<bool> > const& grid,
                      std::vector<std::vector<bool> > const& visited,
-                     int ignoreDir) {
-  // this array stores how far the robot can travel in a straight line for each direction
-  int free_space_in_dir[5] = {0};
+                     int free_space_in_dir [5]) {
+  // init output
+  for (int i = 1; i < 5; ++i) {
+    free_space_in_dir[i] = 0;
+  }
   // for each direction
-  for (int i = 1; i < 5; i++) {
-    // start from starting pos
-    int x2 = x_init;
-    int y2 = y_init;
-    do {  // loop until hit wall
+  for (int i = 1; i < 5; ++i) {
+    // free_space_in_dir[i] = free_space_in_dir[i - 1] + free_space_in_dir[i];
+    int x2 = x_init, y2 = y_init;
+    while (validMove(x2, y2, n_cols, n_rows, grid, visited)) {
       switch (i) {
         case east:
           x2++;
@@ -370,9 +371,42 @@ int dirWithMostSpace(int x_init, int y_init, int nCols, int nRows,
         default:
           break;
       }
-      free_space_in_dir[i]++;
-    } while (validMove(x2, y2, nCols, nRows, grid, visited));
+    }
+    free_space_in_dir[i]++;
   }
+}
+
+int dirWithLeastSpace(int x_init, int y_init, int n_cols, int n_rows,
+                     std::vector<std::vector<bool> > const& grid,
+                     std::vector<std::vector<bool> > const& visited,
+                     int ignore_dir) {
+  // this array stores how far the robot can travel in a straight line for each direction
+  int free_space_in_dir[5] = {0};
+  analyseFreeSpaces(x_init, y_init, n_cols, n_rows, grid, visited, free_space_in_dir);
+
+  // set initial direction towards direction with least travel possible
+  int robot_dir = 0;
+  int least_space_value = 1410065408;  // max value int can represent
+  for (int i = 1; i <= 4; i++) {
+      // std::cout << "free space in " << i << ": " << free_space_in_dir[i] << std::endl;
+      if (
+        i != ignore_dir
+        && free_space_in_dir[i] < least_space_value
+      ) {
+          robot_dir = i;
+          least_space_value = free_space_in_dir[i];
+      }
+  }
+  return robot_dir;
+}
+
+int dirWithMostSpace(int x_init, int y_init, int nCols, int nRows,
+                     std::vector<std::vector<bool> > const& grid,
+                     std::vector<std::vector<bool> > const& visited,
+                     int ignoreDir) {
+  // this array stores how far the robot can travel in a straight line for each direction
+  int free_space_in_dir[5] = {0};
+  analyseFreeSpaces(x_init, y_init, nCols, nRows, grid, visited, free_space_in_dir);
 
   // set initial direction towards direction with most travel possible
   int robot_dir = 0;

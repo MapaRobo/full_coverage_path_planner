@@ -160,6 +160,23 @@ void addNodeToList(int x2, int y2, std::list<gridNode_t>& pathNodes,
                    std::vector<std::vector<bool>>& visited);
 
 /**
+ * Analyse free spaces starting from a point to all 4 directions
+ */
+void analyseFreeSpaces(int x_init, int y_init, int n_cols, int n_rows,
+                     std::vector<std::vector<bool> > const& grid,
+                     std::vector<std::vector<bool> > const& visited,
+                     int free_space_in_dir [5]);
+
+/**
+ * Returns direction in which least free space is visible when given the robot's current location
+ * @param ignore_dir ignores a single direction specified. Pass 0 (point) to consider all four directions.
+ */
+int dirWithLeastSpace(int x_init, int y_init, int n_cols, int n_rows,
+                     std::vector<std::vector<bool> > const& grid,
+                     std::vector<std::vector<bool> > const& visited,
+                     int ignore_dir);
+
+/**
  * Returns direction in which most free space is visible when given the robot's current location
  * @param ignoreDir ignores a single direction specified. Pass 0 (point) to consider all four directions.
  */
