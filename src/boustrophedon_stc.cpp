@@ -95,7 +95,7 @@ std::list<Point_t> BoustrophedonSTC::outer_loop(std::vector<std::vector<bool> > 
   bool done = false;
   while (!done) {
     // 1. drive straight until not a valid move (hit occupied cell or at end of map)
-    while(!validMove(x + dx, y + dy, n_cols, n_rows, grid, visited)) {
+    while(validMove(x + dx, y + dy, n_cols, n_rows, grid, visited)) {
       x += dx;
       y += dy;
       addNodeToList(x, y, path_nodes, visited);
