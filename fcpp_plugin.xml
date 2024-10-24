@@ -6,4 +6,9 @@
       When stuck while completing a boustrophedon pattern, use A* to get out again and start a new boustrophedon, until A* can't find a path to uncovered cells
     </description>
   </class>
+  <class name="full_coverage_path_planner/OuterLoop" type="full_coverage_path_planner::OuterLoop" base_class_type="nav_core::BaseGlobalPlanner">
+    <description>
+      Plans a path that covers all accessible points on edge of a costmap and form an outer loop.
+    </description>
+  </class>
 </library>

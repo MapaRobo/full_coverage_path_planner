@@ -36,6 +36,7 @@ add_library(${PROJECT_NAME}
         src/common.cpp
         src/${PROJECT_NAME}.cpp
         src/boustrophedon_stc.cpp
+        src/outer_loop.cpp
         )
 add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(${PROJECT_NAME}
